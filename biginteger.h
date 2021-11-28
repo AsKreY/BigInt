@@ -17,6 +17,8 @@ class BigInteger {
  public:
   BigInteger() = default;
 
+  ~BigInteger() = default;
+
   BigInteger(const BigInteger &a) = default;
 
   BigInteger &operator=(const BigInteger &a) = default;
@@ -42,10 +44,6 @@ class BigInteger {
     return is_negative;
   }
 
-  std::vector<long long> get_num() const {
-    return num;
-  }
-
   BigInteger &operator+=(const BigInteger &arg);
 
   BigInteger &operator-=(const BigInteger &arg);
@@ -69,6 +67,8 @@ class BigInteger {
   std::string toString() const;
 
   explicit operator bool() const;
+
+  friend bool operator<(const BigInteger &a, const BigInteger &b);
 };
 
 BigInteger::BigInteger(const std::string &num_) {
@@ -85,7 +85,7 @@ BigInteger::BigInteger(const std::string &num_) {
   }
   for (long long i = num_.length(); i > end; i -= 9) {
     if (i < 9 + end) {
-      num.push_back(std::stoi(num_.substr(end, i)));
+      num.push_back(std::stoi(num_.substr(end, (is_negative) ? i - 1 : i)));
     } else {
       num.push_back(std::stoi(num_.substr(i - 9, 9)));
     }
@@ -96,10 +96,10 @@ BigInteger::BigInteger(const std::string &num_) {
 
 BigInteger::BigInteger(int num_) : is_negative(num_ < 0) {
   if (is_negative) num_ *= -1;
-  while (num_) {
+  do {
     num.push_back(num_ % base);
     num_ /= base;
-  }
+  } while (num_);
 }
 
 BigInteger::operator bool() const {
@@ -156,26 +156,24 @@ std::istream &operator>>(std::istream &os, BigInteger &a) {
 }
 
 bool operator<(const BigInteger &a, const BigInteger &b) {
-  if (!a.get_sign() && b.get_sign()) {
+  if (!a.is_negative && b.is_negative) {
     return false;
   }
-  if (!b.get_sign() && a.get_sign()) {
+  if (!b.is_negative && a.is_negative) {
     return true;
   }
-  std::vector<long long> a_num = a.get_num();
-  std::vector<long long> b_num = b.get_num();
-  if (((a_num.size() < b_num.size()) && (!a.get_sign())) || ((a_num.size() > b_num.size()) && (a.get_sign()))) {
+  if (((a.num.size() < b.num.size()) && (!a.is_negative)) || ((a.num.size() > b.num.size()) && (a.is_negative))) {
     return true;
   }
-  if (((a_num.size() < b_num.size()) && (a.get_sign())) || ((a_num.size() > b_num.size()) && (!a.get_sign()))) {
+  if (((a.num.size() < b.num.size()) && (a.is_negative)) || ((a.num.size() > b.num.size()) && (!a.is_negative))) {
     return false;
   }
-  size_t i = a_num.size() - 1;
+  size_t i = a.num.size() - 1;
   while (true) {
-    if (((a_num[i] > b_num[i]) && (!a.get_sign())) || ((a_num[i] < b_num[i]) && (a.get_sign()))) {
+    if (((a.num[i] > b.num[i]) && (!a.is_negative)) || ((a.num[i] < b.num[i]) && (a.is_negative))) {
       return false;
     }
-    if (((a_num[i] < b_num[i]) && (!a.get_sign())) || ((a_num[i] > b_num[i]) && (a.get_sign()))) {
+    if (((a.num[i] < b.num[i]) && (!a.is_negative)) || ((a.num[i] > b.num[i]) && (a.is_negative))) {
       return true;
     }
     if (!i) {
@@ -207,9 +205,9 @@ bool operator>=(const BigInteger &a, const BigInteger &b) {
 }
 
 BigInteger BigInteger::operator-() {
-  zero_fix();
   BigInteger copy = *this;
   copy.is_negative = !copy.is_negative;
+  copy.zero_fix();
   return copy;
 }
 
@@ -433,6 +431,7 @@ class Rational {
 
  public:
   Rational() = default;
+  ~Rational() = default;
   Rational(const BigInteger &a) : numerator(a) {
     sign_fix();
   }
@@ -490,8 +489,11 @@ void Rational::to_irreducible() {
 
 Rational &Rational::operator+=(const Rational &arg) {
   BigInteger lcm_ = lcm(denominator, arg.denominator);
-  numerator = numerator * (lcm_ / denominator) + arg.numerator * (lcm_ / arg.denominator);
+  numerator = ((is_negative) ? -1 : 1) * numerator * (lcm_ / denominator)
+      + ((arg.is_negative) ? -1 : 1) * arg.numerator * (lcm_ / arg.denominator);
   denominator = lcm_;
+  is_negative = numerator.get_sign();
+  if (numerator < 0) numerator = -numerator;
   to_irreducible();
   return *this;
 }
@@ -551,7 +553,7 @@ bool operator<(const Rational &a, const Rational &b) {
   if (a.get_sign() && !b.get_sign()) {
     return true;
   }
-  if (!((a - b).get_sign())) {
+  if ((a - b).get_sign()) {
     return true;
   }
   return false;
@@ -582,11 +584,14 @@ std::string Rational::toString() const {
   if (is_negative) {
     ans += '-';
   }
+  if (denominator == 1) {
+    return ans + numerator.toString();
+  }
   ans += numerator.toString() + '/' + denominator.toString();
   return ans;
 }
 
-std::string Rational::asDecimal(size_t precision) const{
+std::string Rational::asDecimal(size_t precision) const {
   std::string ans;
   if (is_negative) {
     ans = "-";
@@ -597,7 +602,7 @@ std::string Rational::asDecimal(size_t precision) const{
   return ans;
 }
 
-Rational::operator double() const{
+Rational::operator double() const {
   std::string a = asDecimal(15);
   if (is_negative) {
     return -1 * std::strtod(a.substr(1, a.length() - 1).c_str(), nullptr);
